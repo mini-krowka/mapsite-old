@@ -74,6 +74,18 @@ window.goo = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
     // p: Террейн (Terrain)
     // r: Некоторый тип схемы (Altered roadmap)
 
+// Яндекс Карты (схема)
+const yandexUrl = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU';
+const yandexAttrib = '<a http="https://yandex.ru" target="_blank">Yandex</a>';
+window.yandexLayer = L.tileLayer(yandexUrl, {
+    attribution: yandexAttrib,
+    subdomains: ['01','02','03','04'],
+    noWrap: true,
+    name: 'yandex',
+    minZoom: 12
+	// crs: L.CRS.EPSG3395,
+    //zoomOffset: 0
+});
 
 
 
@@ -82,11 +94,17 @@ window.goo = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
 
 
 // Инициализация карты
-const map = L.map('map').setView([55.751244, 37.618423], 5);
+const map = L.map('map').setView([48.257381, 37.134785], 10);
 // L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     // attribution: '© OpenStreetMap'
 // }).addTo(map);
 window.osm.addTo(map);
+
+
+// Добавляем обработчик изменения масштаба
+map.on('zoomend', function() {
+    console.log('Текущий масштаб карты:', map.getZoom());
+});
 
 
 function replaceAttributionFlag() {
@@ -145,6 +163,16 @@ L.Control.Attribution.prototype.addAttribution = function(text) {
 map.whenReady(replaceAttributionFlag);
 map.on('baselayerchange', replaceAttributionFlag);
 
+// map.on('baselayerchange', layer => {
+    // const center = map.getCenter();
+    // if (layer.name.includes('Yandex')) {
+      // map.options.crs = L.CRS.EPSG3395;
+    // } else {
+      // map.options.crs = L.CRS.EPSG3857;
+    // }
+    // map.setView(center);
+  // });
+
 // Управление слоями карты
 const baseLayers = {
     "OpenStreetMap": osm,
@@ -154,6 +182,7 @@ const baseLayers = {
     // "CartoDB Voyager": carto,
     // "RU Army": ru,
     "Google Maps": goo
+    // "Yandex Maps": yandexLayer
 };
 
 // Создаем кастомный контрол слоев
@@ -349,10 +378,27 @@ document.addEventListener('click', function(e) {
 });
 // Для RU слоя ограничиваем зум
 map.on('baselayerchange', function(e) {
-    if (e.name === "RU Army") {
-        if (map.getZoom() < 10) map.setZoom(10);
-        if (map.getZoom() > 13) map.setZoom(13);
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    
+    // Сохраняем текущий CRS перед проверкой
+    const oldCRS = map.options.crs;
+    
+    // Определяем новый CRS
+    let newCRS;
+    if (e.name.includes("Yandex")) {
+        newCRS = L.CRS.EPSG3395;
+    } else {
+        newCRS = L.CRS.EPSG3857;
     }
+    
+    // Сравниваем CRS и меняем только при необходимости
+    if (oldCRS !== newCRS) {
+        map.options.crs = newCRS;
+        // Перезагружаем KML только если CRS изменился
+        reloadKmlForCRS(center, zoom);
+    }
+    map.invalidateSize();
 });
 
 // Обработчик для выбора слоя (радио-кнопки)
@@ -372,4 +418,117 @@ layerControlContainer.addEventListener('click', function(e) {
 	// window.initialLayerSet = true;
 // }
 // });
+
+
+
+
+
+
+
+
+//////////////////////////////////////////////////////
+// Линейка
+let rulerToggle;
+function initRulerControl() {
+  // Создаем кнопку переключения как стандартный контрол Leaflet
+  rulerToggle = L.control({ position: 'topleft' });
+  
+  rulerToggle.onAdd = function(map) {
+    this._div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-ruler-toggle');
+    const link = L.DomUtil.create('a', 'leaflet-control-ruler-toggle-btn', this._div);
+    link.href = '#';
+    link.title = translations[currentLang].rulerToggleTitle;
+    link.innerHTML = '📏'; // Или использовать SVG
+    return this._div;
+  };
+  
+  rulerToggle.addTo(map);
+
+  // Обработчик клика по кнопке
+  rulerToggle.getContainer().querySelector('a').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleRulerPanel();
+  });
+}
+
+function toggleRulerPanel() {
+  const isActive = rulerToggle.getContainer().classList.contains('active');
+  
+  if (isActive) {
+    hideRulerPanel();
+  } else {
+    showRulerPanel();
+  }
+}
+
+function showRulerPanel() {
+    if (rulerToggle && rulerToggle.getContainer) {
+        rulerToggle.getContainer().classList.add('active');
+    }
+    
+    const measureContainer = window.measureControl && window.measureControl.getContainer();
+    if (measureContainer) {
+        measureContainer.style.display = 'block';
+    }
+}
+
+function hideRulerPanel() {
+    if (rulerToggle && rulerToggle.getContainer) {
+        rulerToggle.getContainer().classList.remove('active');
+    }
+    
+    const measureContainer = window.measureControl && window.measureControl.getContainer();
+    if (measureContainer) {
+        measureContainer.style.display = 'none';
+    }
+}
+
+
+
+// функция для инициализации контрола измерения
+function initMeasureControl() {
+    const currentLang = localStorage.getItem('preferredLang') || 'ru';
+    const t = translations[currentLang];
+    
+    const options = {
+        position: 'topleft',
+        unit: 'kilometres',
+        clearMeasurementsOnStop: false,
+        showUnitControl: true,
+        backgroundColor: '#f8f8f8',
+        cursor: 'crosshair',
+        showClearControl: true,
+        clearControlLabel: '&times;',
+        popupFormat: { number: 2 },
+        measureControlTitleOn: t.measureControlTitleOn,
+        measureControlTitleOff: t.measureControlTitleOff,
+        clearControlTitle: t.clearControlTitle,
+        unitControlTitle: t.unitControlTitle,
+        bearingText: currentLang === 'ru' ? 'Азимут' : 'Bearing',
+        units: t.units
+    };
+
+
+    // Удаляем старый контрол если существует
+    //if (window.measureControl) {
+        //window.measureControl.remove();
+        //window.measureControl = null;
+    //}
+
+    // Создаем контрол только если его еще нет
+    if (!window.measureControl) {
+        window.measureControl = L.control.polylineMeasure(options);
+        window.measureControl.addTo(map);
+    }
+}
+
+// Инициализация после создания карты
+document.addEventListener('DOMContentLoaded', function() {
+    initRulerControl();
+    initMeasureControl(); // Инициализация линейки
+    hideRulerPanel();
+});
+
+
 
