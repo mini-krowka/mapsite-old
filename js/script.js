@@ -124,125 +124,71 @@ function populateCitiesDropdown() {
     });
 }
 
-function parseCoordinateString(str) {
-    if (!str) return null;
-
-    // Нормализуем строку: убираем мусор, приводим к верхнему регистру
-    let cleaned = str
-        .trim()
-        .toUpperCase()
-        .replace(/[‘'′]/g, "'")
-        .replace(/[“”″]/g, '"')
-        .replace(/[°º˚]/g, '°')
-        .replace(/\s+/g, ' ')
-        .replace(/С(\.|\s)?Ш(\.)?/g, 'N')
-        .replace(/Ю(\.|\s)?Ш(\.)?/g, 'S')
-        .replace(/З(\.|\s)?Д(\.)?/g, 'W')
-        .replace(/В(\.|\s)?Д(\.)?/g, 'E')
-        .replace(/[^0-9A-Z°'" .,;\-]/g, '')
-        .trim();
-
-    let match;
-
-    // Поддержка дробей с запятой: 47,574318,35,412388
-    // Заменим все запятые на точки, но только если есть ровно 2
-    const numCommas = (str.match(/,/g) || []).length;
-    if (numCommas === 2 && str.indexOf('.') === -1) {
-        cleaned = str.replace(/,/g, '.').replace(/\s+/g, ' ');
-    }
-
-    // Попробуем распарсить как два десятичных числа с любым разделителем
-    const decimalRegex = /^(-?\d{1,2}(?:[.,]\d+))\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+))$/;
-    if ((match = cleaned.match(decimalRegex))) {
-        const lat = parseFloat(match[1].replace(',', '.'));
-        const lon = parseFloat(match[2].replace(',', '.'));
-        return [lat, lon];
-    }
-
-    // Десятичные координаты с полушариями (47.574318° N 35.412388° E)
-    const hemisphericalDecimalRegex = /^(\d{1,2}(?:[.,]\d+)?)°?\s*([NS])\s+(\d{1,3}(?:[.,]\d+)?)°?\s*([EW])$/;
-    if ((match = cleaned.match(hemisphericalDecimalRegex))) {
-        const lat = parseFloat(match[1].replace(',', '.')) * (match[2] === 'S' ? -1 : 1);
-        const lon = parseFloat(match[3].replace(',', '.')) * (match[4] === 'W' ? -1 : 1);
-        return [lat, lon];
-    }
-
-    // DMS координаты (47°56'53"N 36°33'13"E)
-    const dmsRegex = /([NS])?\s*(\d{1,2})°\s*(\d{1,2})'?\s*(\d{1,2}(?:[.,]\d+)?)?"?\s*([NS])?\s*([EW])?\s*(\d{1,3})°\s*(\d{1,2})'?\s*(\d{1,2}(?:[.,]\d+)?)?"?\s*([EW])?/;
-    if ((match = cleaned.match(dmsRegex))) {
-        const latDir = match[1] || match[5] || 'N';
-        const lonDir = match[6] || match[10] || 'E';
-
-        const latDeg = parseFloat(match[2]);
-        const latMin = parseFloat(match[3]);
-        const latSec = parseFloat(match[4].replace(',', '.'));
-
-        const lonDeg = parseFloat(match[7]);
-        const lonMin = parseFloat(match[8]);
-        const lonSec = parseFloat(match[9].replace(',', '.'));
-
-        const lat = (latDeg + latMin / 60 + latSec / 3600) * (latDir === 'S' ? -1 : 1);
-        const lon = (lonDeg + lonMin / 60 + lonSec / 3600) * (lonDir === 'W' ? -1 : 1);
-
-        return [lat, lon];
-    }
-
-    // Русские десятичные координаты (N 47,574318 E 35,412388)
-    const russianDecimalRegex = /^(\d{1,2}(?:[.,]\d+)?)°?\s*N\s+(\d{1,3}(?:[.,]\d+)?)°?\s*E$/;
-    if ((match = cleaned.match(russianDecimalRegex))) {
-        const lat = parseFloat(match[1].replace(',', '.'));
-        const lon = parseFloat(match[2].replace(',', '.'));
-        return [lat, lon];
-    }
-
-    return null;
-}
-
-
-
 // Функция центрирования карты по координатам
 let highlightMarker = null;
 let highlightTimeout = null;
 let highlightAnimationInterval = null;
 
-function centerMap(lat, lng) {    
-    const centerMapZoom = 14;
-    map.setView([lat, lng], centerMapZoom);
+function centerMap(lat, lng) {
+    const currentZoom = map.getZoom();
+    map.setView([lat, lng], currentZoom);
     document.getElementById('coords-input').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
-    // Очищаем предыдущие элементы
+    // Очищаем предыдущие элементы анимации
     if (highlightMarker) {
         map.removeLayer(highlightMarker);
         highlightMarker = null;
     }
+    if (highlightAnimationInterval) {
+        clearInterval(highlightAnimationInterval);
+    }
     if (highlightTimeout) {
         clearTimeout(highlightTimeout);
-        highlightTimeout = null;
     }
 
-    // Создаем кастомную иконку с фиксированным размером в пикселях
-    const customIcon = L.icon({
-        iconUrl: 'img/mapMarker.png', // путь к вашей картинке
-        iconSize: [100, 100],           // размер иконки в пикселях [ширина, высота]
-        iconAnchor: [50, 50],        // точка привязки должна быть в центре нижней части изображения
-        popupAnchor: [0, 0],       // где появляется popup относительно anchor
-        className: 'fixed-marker'     // добавляем класс для дополнительного CSS контроля
-    });
+    // Параметры анимации
+    const startRadius = 10000; // Начальный радиус 2 км
+    const endRadius = 200;    // Конечный радиус 200 м
+    const duration = 2500;    // Длительность анимации 2 секунды
+    const steps = 100;         // Количество шагов анимации
 
-    // Создаем маркер с кастомной иконкой
-    highlightMarker = L.marker([lat, lng], {icon: customIcon}).addTo(map);
+    // Создаем временный маркер
+    highlightMarker = L.circle([lat, lng], {
+        color: '#ff4444',
+        fillColor: '#ff7777',
+        fillOpacity: 0.3,
+        radius: startRadius
+    }).addTo(map);
 
-    // Убрали таймер автоматического удаления
-    // Удаление теперь будет происходить только по кнопке очистки
-    
-    // Явно обновляем лейблы текущих координат
+    // Анимация уменьшения
+    let currentStep = 0;
+    highlightAnimationInterval = setInterval(() => {
+        currentStep++;
+        const progress = currentStep / steps;
+        const currentRadius = startRadius - (startRadius - endRadius) * progress;
+        
+        highlightMarker.setRadius(currentRadius);
+        
+        if (currentStep >= steps) {
+            clearInterval(highlightAnimationInterval);
+        }
+    }, duration / steps);
+
+    // Удаление через 5 секунд
+    highlightTimeout = setTimeout(() => {
+        map.removeLayer(highlightMarker);
+        highlightMarker = null;
+    }, 5000);
+	
+	
+	// Явно обновляем лейблы текущих координат
     document.getElementById('current-center-coords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     
     const cloneCoords = document.getElementById('current-center-coords-clone');
     if (cloneCoords) {
         cloneCoords.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }
-        
+		
     // Обновляем поля ввода координат
     const coordValue = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     
@@ -255,28 +201,6 @@ function centerMap(lat, lng) {
     if (coordsClone) coordsClone.value = coordValue;
 }
 
-// Функция для очистки маркера и полей ввода
-function clearMarkerAndInput() {
-    if (highlightMarker) {
-        map.removeLayer(highlightMarker);
-        highlightMarker = null;
-    }
-    if (highlightTimeout) {
-        clearTimeout(highlightTimeout);
-        highlightTimeout = null;
-    }
-    
-    // Очищаем оба поля ввода координат
-    const coordsInput = document.getElementById('coords-input');
-    const coordsClone = document.getElementById('coords-input-clone');
-    
-    if (coordsInput) coordsInput.value = '';
-    if (coordsClone) coordsClone.value = '';
-    
-    // Обновляем видимость кнопок очистки
-    toggleClearButton(coordsInput);
-    toggleClearButton(coordsClone);
-}
 
 
 // Вспомогательные функции для парсинга (должны быть доступны для постоянных и временных слоев)
@@ -310,37 +234,17 @@ function parsePolyStyle(style) {
     };
 }
 
-function parseCoordinates(element, crs) {
-  // Строка из поля — одна пара [lat, lng]
-  if (typeof element === 'string') {
-    const val = element.trim();
-    if (!val) return [];
-    if (typeof parseCoordinateString === 'function') {
-      const tuple = parseCoordinateString(val);
-      return Array.isArray(tuple) && tuple.length >= 2 ? [tuple[0], tuple[1]] : [];
-    }
-    const m = val.match(/(-?\d+(?:[\.,]\d+)?)[\s,]+(-?\d+(?:[\.,]\d+)?)/);
-    if (!m) return [];
-    const lat = parseFloat(m[1].replace(',', '.'));
-    const lng = parseFloat(m[2].replace(',', '.'));
-    return [lat, lng];
-  }
-
-  // KML-элемент — массив пар [[lat, lng], ...]
-  const coordinates = element?.querySelector('coordinates')?.textContent;
-  if (!coordinates) return [];
-  return coordinates
-    .trim()
-    .split(/\s+/)
-    .map(coord => {
-      const parts = coord.split(',');
-      if (parts.length < 2) return null;
-      const lng = parseFloat(parts[0]);
-      const lat = parseFloat(parts[1]);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-      return [lat, lng];
-    })
-    .filter(Boolean);
+function parseCoordinates(element) {
+    const coordinates = element?.querySelector('coordinates')?.textContent;
+    if (!coordinates) return [];
+    
+    return coordinates
+        .trim()
+        .split(/\s+/)
+        .map(coord => {
+            const [lng, lat] = coord.split(',').map(Number);
+            return [lat, lng];
+        });
 }
 
 function parseColor(kmlColor) {
@@ -462,13 +366,12 @@ async function loadPermanentKmlLayers() {
                     // Обработка LineString
                     const lineString = placemark.querySelector('LineString');
                     if (lineString) {
-                        const coords = parseCoordinates(lineString, map.options.crs);
+                        const coords = parseCoordinates(lineString);
                         if (coords.length >= 2) {
                             const polyline = L.polyline(coords, {
                                 color: style.line.color || '#3388ff',
                                 weight: style.line.weight || 3,
-                                opacity: style.line.opacity || 1,
-								interactive: false
+                                opacity: style.line.opacity || 1
                             }).addTo(layerGroup);
                             
                             // Обновляем границы СРАЗУ ПОСЛЕ СОЗДАНИЯ
@@ -488,14 +391,13 @@ async function loadPermanentKmlLayers() {
                     // Обработка Polygon
                     const polygon = placemark.querySelector('Polygon');
                     if (polygon) {
-                        const coords = parseCoordinates(polygon.querySelector('LinearRing'), map.options.crs);
+                        const coords = parseCoordinates(polygon.querySelector('LinearRing'));
                         if (coords.length >= 3) {
                             const poly = L.polygon(coords, {
                                 color: style.line.color || '#3388ff',
                                 weight: style.line.weight || 0,
                                 fillColor: style.poly.fillColor || '#3388ff',
-                                fillOpacity: style.poly.fillOpacity || 0.5,
-								interactive: false // Отключаем интерактивность полигонов
+                                fillOpacity: style.poly.fillOpacity || 0.5
                             }).addTo(layerGroup);
                             
                             // Обновляем границы СРАЗУ ПОСЛЕ СОЗДАНИЯ
@@ -527,9 +429,9 @@ async function loadPermanentKmlLayers() {
                 window.permanentLayerGroups.push(layerGroup);
                 
                 // Применяем границы только если они валидны
-//                if (bounds.isValid()) {
-//                    map.fitBounds(bounds);
-//                }
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds);
+                }
             } catch (error) {
                 console.error(`Ошибка обработки слоя ${layerData.path}:`, error);
             }
@@ -540,7 +442,7 @@ async function loadPermanentKmlLayers() {
 }
 
 // Функция загрузки основного KML (с сохранением оригинальных стилей)
-async function loadKmlFile(file, targetCRS) {
+async function loadKmlFile(file) {
     if (currentLayer) {
         map.removeLayer(currentLayer);
     }
@@ -638,7 +540,7 @@ async function loadKmlFile(file, targetCRS) {
             // Обработка LineString
             const lineString = placemark.querySelector('LineString');
             if (lineString) {
-                const coords = parseCoordinates(lineString, map.options.crs);
+                const coords = parseCoordinates(lineString);
                 if (coords.length < 2) {
                     if (LOG_TEMPORARY_STYLES) console.groupEnd(); // Закрываем группу Placemark
                     return;
@@ -647,8 +549,7 @@ async function loadKmlFile(file, targetCRS) {
                 const polyline = L.polyline(coords, {
                     color: style.color || '#3388ff',
                     weight: style.weight || 3,
-                    opacity: style.opacity || 1,
-                    interactive: false
+                    opacity: style.opacity || 1
                 }).addTo(layerGroup);
 
                 // Логирование информации о линии
@@ -668,7 +569,7 @@ async function loadKmlFile(file, targetCRS) {
             // Обработка Polygon
             const polygon = placemark.querySelector('Polygon');
             if (polygon) {
-                const coords = parseCoordinates(polygon.querySelector('LinearRing'), map.options.crs);
+                const coords = parseCoordinates(polygon.querySelector('LinearRing'));
                 if (coords.length < 3) {
                     if (LOG_TEMPORARY_STYLES) console.groupEnd(); // Закрываем группу Placemark
                     return;
@@ -678,8 +579,7 @@ async function loadKmlFile(file, targetCRS) {
                     color: style.color || '#3388ff',
                     weight: style.weight || 3,
                     fillColor: style.fillColor || '#3388ff',
-                    fillOpacity: style.fillOpacity || 0.5,
-					interactive: false // Отключаем интерактивность полигонов
+                    fillOpacity: style.fillOpacity || 0.5
                 }).addTo(layerGroup);
 
                 // Логирование информации о полигоне
@@ -712,11 +612,11 @@ async function loadKmlFile(file, targetCRS) {
             const ne = bounds.getNorthEast();
             const isNotPoint = sw.lat !== ne.lat || sw.lng !== ne.lng;
             
-//            if (!preserveZoom && isNotPoint) {
-//                map.fitBounds(bounds);
-//            } else {
+            if (!preserveZoom && isNotPoint) {
+                map.fitBounds(bounds);
+            } else {
                 map.setView(currentCenter, currentZoom);
-//            }
+            }
         } else {
             map.setView(currentCenter, currentZoom);
         }
@@ -733,34 +633,11 @@ async function loadKmlFile(file, targetCRS) {
     }
 }
 
-async function reloadKmlForCRS(center, zoom) {
-    await loadPermanentKmlLayers();
-    if (currentLayer){        
-        const file = kmlFiles[currentIndex];
-        try {
-            map.removeLayer(currentLayer);
-            await loadKmlFile(file);
-        } catch (error) {
-            console.error("Ошибка перезагрузки KML:", error);
-        }
-    }
-        
-    // Восстанавливаем позицию с проверкой валидности
-    if (center && zoom && center.lat !== 0 && center.lng !== 0) {
-        map.setView(center, zoom);
-    } else {
-        // Используем центр по умолчанию, если текущий невалиден
-        map.setView([48.257381, 37.134785], 11);
-    }
-    
-    map.invalidateSize();
-}
-
 // Навигация к определенному индексу
 async function navigateTo(index) {
     if (index < 0 || index >= kmlFiles.length) return;
     
-    try {        
+    try {
         currentIndex = index;
         const file = kmlFiles[currentIndex];
         selectedDate = file.name; // Сохраняем выбранную дату
@@ -770,10 +647,7 @@ async function navigateTo(index) {
             datePicker.setDate(selectedDate, false);
         }
         
-		// Определяем текущую CRS
-		const currentCRS = map.options.crs;
         await loadKmlFile(file);
-        
     } catch (error) {
         console.error("Ошибка навигации:", error);
     } finally {
@@ -908,7 +782,7 @@ function setupCopyCoordsButton() {
             document.body.removeChild(textArea);
             
             // Визуальная обратная связь
-            button.textContent = t ? t.copiedText : '✓';
+            button.textContent = t ? t.copiedText : '✓ Скопировано!';
             button.classList.add('copied');
             
             setTimeout(() => {
@@ -978,8 +852,6 @@ async function init() {
       updateCurrentCenterDisplay();
       // replaceAttributionFlag();
     }, 50);
-	
-	map.options.crs = L.CRS.EPSG3857;
     
     const flagInterval = setInterval(() => {
     if (document.querySelector('.leaflet-control-attribution')) {
@@ -1022,7 +894,7 @@ async function init() {
 		window.osm.addTo(map); // Активируйте OSM слой
 		window.initialLayerSet = true;
 	});
-        
+    
   } catch (error) {
     console.error('Ошибка инициализации:', error);
   }
@@ -1168,103 +1040,74 @@ map.whenReady(function() {
 
 
 // Обработчик для поля ввода координат
-function showCoordsError(input, message) {
-    // убираем старый
-    let old = input.parentNode.querySelector('.coords-error-bubble');
-    if (old) old.remove();
-
-    const bubble = document.createElement('div');
-    bubble.className = 'coords-error-bubble';
-    bubble.textContent = message;
-    input.parentNode.appendChild(bubble);
-
-    setTimeout(() => bubble.remove(), 2500);
-}
-
-function hideCoordsError(input) {
-    let old = input.parentNode.querySelector('.coords-error-bubble');
-    if (old) old.remove();
-}
-
-function normalizeToTuple(coords) {
-  if (!coords) return null;
-  if (Array.isArray(coords) && coords.length >= 2) {
-    return [coords[0], coords[1]];
-  }
-  if (typeof coords === 'object') {
-    if ('lat' in coords && ('lng' in coords || 'lon' in coords)) {
-      return [coords.lat, coords.lng ?? coords.lon];
-    }
-    if ('y' in coords && 'x' in coords) {
-      // иногда приходят как x/y
-      return [coords.y, coords.x];
-    }
-  }
-  return null;
-}
-
-function centerMapFromInput(input, showAlert = false) {
-  const raw = parseCoordinates(input.value.trim());
-  const coords = normalizeToTuple(raw);
-
-  if (coords) {
-    const [lat, lng] = coords;
-    centerMap(lat, lng);
-    if (typeof hideCoordsError === 'function') hideCoordsError(input);
-  } else if (showAlert) {
-    if (typeof showCoordsError === 'function') {
-      showCoordsError(input, translations[currentLang].invalidCoords);
-    } else {
-      alert(translations[currentLang].invalidCoords);
-    }
-  }
-}
-
-function setupInputWithClear(inputEl, clearBtn) {
-    function toggleClearButton() {
-        if (inputEl.value.trim() !== "") {
-            clearBtn.style.display = "inline-flex";
-        } else {
-            clearBtn.style.display = "none";
+coordsInput.addEventListener('change', function() {
+    const coords = this.value.split(',').map(coord => coord.trim());
+    if (coords.length === 2) {
+        const lat = parseFloat(coords[0]);
+        const lng = parseFloat(coords[1]);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            centerMap(lat, lng);
+            
+            // Синхронизируем значение во всех клонах
+            document.querySelectorAll('#coords-input').forEach(input => {
+                if (input !== this) {
+                    input.value = this.value;
+                }
+            });
         }
     }
-
-    // следим за вводом, вставкой и изменениями
-    inputEl.addEventListener("input", toggleClearButton);
-    inputEl.addEventListener("change", toggleClearButton);
-
-    clearBtn.addEventListener("click", () => {
-        inputEl.value = "";
-        toggleClearButton();
-        hideErrorBubble(inputEl);
-    });
-
-    // начальная инициализация
-    toggleClearButton();
- }
-
-// Обработчик для ввода
-document.querySelectorAll('#coords-input, #coords-input-clone').forEach(input => {
-    // Автоматическое центрирование при вставке (без ошибок)
-    input.addEventListener('input', function() {
-        centerMapFromInput(this, false);
-    });
-    
-    // Обработка Enter с показом ошибок
-    input.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            centerMapFromInput(this, true);
-        }
-    });
 });
 
 // обработчик для нажатия Enter в поле ввода
-// coordsInput.addEventListener('keypress', function(e) {
-	// if (e.key === 'Enter') {
-		// this.dispatchEvent(new Event('change'));
+coordsInput.addEventListener('keypress', function(e) {
+  // if (e.key === 'Enter') {
+    // const coords = this.value.split(',').map(coord => coord.trim());
+    // if (coords.length === 2) {
+      // const lat = parseFloat(coords[0]);
+      // const lng = parseFloat(coords[1]);
+      // if (!isNaN(lat) && !isNaN(lng)) {
+        // centerMap(lat, lng);
+      // }
     // }
-// });
+  // }
+	if (e.key === 'Enter') {
+		this.dispatchEvent(new Event('change'));
+    }
+});
 
+// Гамбургер переключатель видов
+
+//document.addEventListener('DOMContentLoaded', function() {
+    //const viewMenuBtn = document.querySelector('.view-menu-btn');
+    //const viewMenuContainer = document.querySelector('.view-menu-container');
+    
+    //if (viewMenuBtn && viewMenuContainer) {
+        //// Обработчик открытия/закрытия меню видов
+        //viewMenuBtn.addEventListener('click', function(e) {
+            //e.stopPropagation();
+            //viewMenuContainer.classList.toggle('active');
+        //});
+        
+        //// Закрытие меню при клике вне его
+        //document.addEventListener('click', function(e) {
+            //if (!viewMenuContainer.contains(e.target)) {
+                //viewMenuContainer.classList.remove('active');
+            //}
+        //});
+        
+        //// Закрытие меню при выборе вида
+        //document.querySelectorAll('.view-dropdown .view-btn').forEach(btn => {
+            //btn.addEventListener('click', function() {
+                //viewMenuContainer.classList.remove('active');
+                
+                //// Перерисовываем карту при необходимости
+                //if (map && this.id === 'map-btn') {
+                    //setTimeout(() => map.invalidateSize(), 100);
+                //}
+            //});
+        //});
+    //}
+//});
 document.querySelectorAll('.view-menu-container').forEach(container => {
     const viewMenuBtn = container.querySelector('.view-menu-btn');
     
@@ -1512,17 +1355,24 @@ function setupDropdownListeners() {
     // Обработчик для поля ввода координат в меню
     const coordsClone = document.getElementById('coords-input-clone');
     if (coordsClone) {
-        // Автоматическое центрирование при вставке
-        coordsClone.addEventListener('input', function() {
-            centerMapFromInput(this, false);
-        });
-        
-        // Обработка Enter с показом ошибок и закрытием меню
-        coordsClone.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                if (centerMapFromInput(this, true)) {
+        coordsClone.addEventListener('change', function() {
+            const coords = this.value.split(',').map(coord => coord.trim());
+            if (coords.length === 2) {
+                const lat = parseFloat(coords[0]);
+                const lng = parseFloat(coords[1]);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    centerMap(lat, lng);
+                    // Закрываем меню после центрирования
                     navDropdown.classList.remove('active');
                 }
+            }
+        });
+        
+        coordsClone.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                this.dispatchEvent(new Event('change'));
+                // Дополнительно закрываем меню
+                navDropdown.classList.remove('active');
             }
         });
     }
@@ -1644,208 +1494,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
-
-
-
-
-
-// === Inline error bubble for coords input ===
-(function(){
-  function ensureCoordsErrorStyle() {
-    if (document.getElementById('coords-error-style')) return;
-    const style = document.createElement('style');
-    style.id = 'coords-error-style';
-    style.textContent = `
-      .coords-error-bubble{
-        position:absolute;
-        left:0;
-        top:calc(100% + 4px);
-        padding:4px 8px;
-        background:#ffeaea;
-        color:#b00020;
-        border:1px solid #f3b2b2;
-        border-radius:4px;
-        font-size:12px;
-        line-height:1.2;
-        white-space:nowrap;
-        pointer-events:none;
-        box-shadow:0 1px 2px rgba(0,0,0,.05);
-        z-index:10;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  window._coordsError = {
-    show(input, message){
-      ensureCoordsErrorStyle();
-      if (!input) return;
-      let wrapper = input.closest('.input-with-clear');
-      if (!wrapper) {
-        const w = document.createElement('div');
-        w.className = 'input-with-clear';
-        input.parentNode.insertBefore(w, input);
-        w.appendChild(input);
-        wrapper = w;
-      }
-      let bubble = wrapper.querySelector('.coords-error-bubble');
-      if (!bubble) {
-        bubble = document.createElement('div');
-        bubble.className = 'coords-error-bubble';
-        wrapper.appendChild(bubble);
-      }
-      bubble.textContent = message;
-      bubble.style.display = 'block';
-      if (bubble._timer) clearTimeout(bubble._timer);
-      bubble._timer = setTimeout(()=>{ bubble.style.display='none'; }, 2500);
-      const hide = ()=>{ bubble.style.display='none'; };
-      input.addEventListener('input', hide, { once:true });
-      input.addEventListener('focus', hide, { once:true });
-    },
-    hide(input){
-      if (!input) return;
-      const wrapper = input.closest('.input-with-clear');
-      const bubble = wrapper && wrapper.querySelector('.coords-error-bubble');
-      if (bubble) {
-        bubble.style.display = 'none';
-        if (bubble._timer) clearTimeout(bubble._timer);
-      }
-    }
-  };
-})();
-
-// === Ensure clear button is visible whenever coords input is non-empty (minimal, non-intrusive) ===
-(function () {
-  const IDS = ['coords-input', 'coords-input-clone'];
-  const SEL = '#coords-input, #coords-input-clone';
-
-  function ensureWrappedAndButton(input) {
-    if (!input) return;
-    // Обёртка с позиционированием (нужна и для баббла, и для кнопки)
-    if (!input.parentElement.classList.contains('input-with-clear')) {
-      const wrap = document.createElement('span');
-      wrap.className = 'input-with-clear';
-      input.parentNode.insertBefore(wrap, input);
-      wrap.appendChild(input);
-    }
-    // Кнопка очистки, если ещё нет
-    let btn = input.parentElement.querySelector('.clear-input-btn');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'clear-input-btn';
-      btn.setAttribute('aria-label', 'Очистить');
-      btn.title = 'Очистить';
-      btn.textContent = '✕';
-      input.parentElement.appendChild(btn);
-
-      btn.addEventListener('click', () => {
-        // Очищаем маркер и поля ввода
-        clearMarkerAndInput();
-        
-        // Синхронизируем второе поле, если оно есть
-        IDS.forEach(id => {
-          const other = document.getElementById(id);
-          if (other && other !== input) {
-            other.value = '';
-            toggle(other);
-          }
-        });
-        
-        // Возвращаем фокус на поле ввода
-        input.focus();
-      });
-    }
-  }
-
-  function toggle(input) {
-    if (!input) return;
-    ensureWrappedAndButton(input);
-    const btn = input.parentElement.querySelector('.clear-input-btn');
-    if (!btn) return;
-    btn.style.display = (input.value && input.value.trim()) ? 'inline-flex' : 'none';
-  }
-
-  function refreshAll() {
-    IDS.forEach(id => toggle(document.getElementById(id)));
-  }
-
-  // Инициализация
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', refreshAll, { once: true });
-  } else {
-    refreshAll();
-  }
-
-  // Обновляем видимость на любые текстовые изменения в полях
-  ['input', 'change', 'keyup', 'paste'].forEach(evt => {
-    document.addEventListener(evt, (e) => {
-      const t = e.target;
-      if (!t || !t.matches || !t.matches(SEL)) return;
-      // задержка для paste, чтобы успело вставиться значение
-      if (evt === 'paste') {
-        requestAnimationFrame(() => toggle(t));
-      } else {
-        toggle(t);
-      }
-      // синхронизируем второй инпут, если он есть
-      IDS.forEach(id => {
-        const other = document.getElementById(id);
-        if (other && other !== t) {
-          other.value = t.value;
-          toggle(other);
-        }
-      });
-    }, false);
-  });
-
-  // При смене ширины/ориентации может появиться/исчезнуть клон → пересчёт
-  window.addEventListener('resize', refreshAll);
-  window.addEventListener('orientationchange', refreshAll);
-
-  // Если есть «баббл»-функции, оборачиваем их, чтобы после показа/скрытия пересчитывать кнопку
-  if (typeof window.showCoordsError === 'function') {
-    const _show = window.showCoordsError;
-    window.showCoordsError = function (input, msg) {
-      const r = _show.call(this, input, msg);
-      refreshAll();
-      return r;
-    };
-  }
-  if (typeof window.hideCoordsError === 'function') {
-    const _hide = window.hideCoordsError;
-    window.hideCoordsError = function (input) {
-      const r = _hide.call(this, input);
-      refreshAll();
-      return r;
-    };
-  }
-
-  // На случай динамического создания/перемещения мобильного поля — наблюдатель
-  const mo = new MutationObserver(refreshAll);
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-})();
-
-// === Patch: don't auto-format coords on Backspace (prevents trailing zeros) ===
-(function () {
-  const SEL = '#coords-input, #coords-input-clone';
-
-  // На этапе capture перехватываем input, вызванный Backspace,
-  // и останавливаем дальнейшие обработчики, которые перезаписывают value (маски/formatters).
-  document.addEventListener('input', function (e) {
-    const el = e.target;
-    if (!el || !el.matches || !el.matches(SEL)) return;
-
-    // Важное: именно для удаления влево не даем форматировать/дописывать нули
-    if (e.inputType === 'deleteContentBackward') {
-      // Обновим видимость крестика вручную (он должен быть, если поле непустое)
-      const btn = el.parentElement && el.parentElement.querySelector('.clear-input-btn');
-      if (btn) btn.style.display = el.value.trim() ? 'inline-flex' : 'none';
-
-      // Не даем другим листенерам «подтереть» текст и дописать нули
-      e.stopImmediatePropagation();
-      return;
-    }
-  }, true); // capture: перехватываем раньше остальных
-})();
 
 
