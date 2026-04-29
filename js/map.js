@@ -1,534 +1,482 @@
-// OSM tile
-const osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const osmAttrib =
-'&copy; <a href="https://openstreetmap.org/copyright">' +
-"OpenStreetMap</a> contributors";
-window.osm = L.tileLayer(osmUrl, {
-    attribution: osmAttrib,
-    // maxZoom: 18,
-    noWrap: true,
-    name: 'osm'
-});
+// Конфигурация KML
+window.kmlFiles = [
+    { name: "01.10.24", path: "kml/Line_24_10_01.kml" },
+    { name: "01.11.24", path: "kml/Line_24_11_01.kml" },
+    { name: "01.12.24", path: "kml/Line_24_12_01.kml" },
+    { name: "01.01.25", path: "kml/Line_25_01_01.kml" }, 
+    { name: "01.02.25", path: "kml/Line_25_02_01.kml" },
+    { name: "01.03.25", path: "kml/Line_25_03_01.kml" },
+    { name: "03.04.25", path: "kml/Line_25_04_03.kml" }
+    // ... остальные файлы
+];
 
-// CyclOSM
-// const cyclosmUrl = "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png";
-// const cyclosmAttrib =
-// '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases" title="CyclOSM - Open Bicycle render">CyclOSM</a> | Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors"';
-// window.cyclosm = L.tileLayer(cyclosmUrl, {
-    // attribution: cyclosmAttrib,
-    // noWrap: true,
-    // name: 'cyclosm'
-// });
+window.availableDates = window.kmlFiles.map(file => file.name);
 
-// OpenTopoMap
-const topoUrl = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
-const topoAttrib =
-"Kartendaten: © OpenStreetMap-Mitwirkende, SRTM | Kartendarstellung: © OpenTopoMap (CC-BY-SA) ";
-window.topo = L.tileLayer(topoUrl, {
-  // maxZoom: 18,
-  attribution: topoAttrib,
-  noWrap: true,
-  name: 'topo'
-});
+const cities = [
+    { name: { ru: "Суджа",     en: "Sudzha" }, lat: 51.19055, lng: 35.27082 },
+    { name: { ru: "Волчанск",  en: "Volchansk"  }, lat: 50.288107, lng: 36.946217  },
+    { name: { ru: "Купянск",   en: "Kupyansk"   }, lat: 49.706396, lng: 37.616586  },
+    { name: { ru: "Боровая",   en: "Borovaya"   }, lat: 49.38417,  lng: 37.62086   },
+    { name: { ru: "Северск",   en: "Seversk"    }, lat: 48.868709, lng: 38.106425  },
+    { name: { ru: "Часов Яр",  en: "Chasov Yar" }, lat: 48.591656, lng: 37.820354  },
+    { name: { ru: "Дзержинск", en: "Dzerzhinsk" }, lat: 48.398329, lng:  37.836634 }
+    // ... остальные города
+];
 
-// ESRI
-const esriUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const esriAttrib = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-window.esri = L.tileLayer(esriUrl, {
-  // maxZoom: 18,
-  attribution: esriAttrib,
-  noWrap: true,
-  name: 'esri'
-});
+// Основные переменные
+let map, currentLayer, permanentLayer;
+let currentIndex = window.kmlFiles.length - 1;
+let preserveZoom = false;
+let datePicker = null;
 
-// Carto tile Layer
-// const cartoUrl = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"; 
-// window.carto = L.tileLayer(cartoUrl, {
-  // noWrap: true,
-  // name: 'carto',
-  // attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-// }); 
-
-// RU tile Layer - https://qms.nextgis.com/geoservices/563/
-// const ruUrl = "http://88.99.52.155/cgi-bin/tapp/tilecache.py/1.0.0/topomapper_v2/{z}/{x}/{y}.jpg"; 
-// const ruAttriib = 'Tiles &copy; ATLOGIS Geoinformatics oHG';
-// window.ru = L.tileLayer(ruUrl, {
-    // minZoom: 10,
-    // maxZoom: 13,
-    // noWrap: true,
-    // name: 'ruarmy',
-    // attribution: ruAttriib,
-// });
-
-// Google maps layer
-window.goo = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-      // maxZoom: 20,
-      subdomains:['mt0','mt1','mt2','mt3'],
-      name: 'google',
-      attribution: 'Map data &copy; Google'
-});
- // lyrs =
-    // s: Спутник (Satellite)
-    // y: Гибрид (не h)
-    // m: Схема (Map)
-    // p: Террейн (Terrain)
-    // r: Некоторый тип схемы (Altered roadmap)
-
-// Яндекс Карты (схема)
-const yandexUrl = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU';
-const yandexAttrib = '<a http="https://yandex.ru" target="_blank">Yandex</a>';
-window.yandexLayer = L.tileLayer(yandexUrl, {
-    attribution: yandexAttrib,
-    subdomains: ['01','02','03','04'],
-    noWrap: true,
-    name: 'yandex',
-    minZoom: 12
-	// crs: L.CRS.EPSG3395,
-    //zoomOffset: 0
-});
-
-
-
-
-/////////////////////////////////////////////
-
+let citiesDropdown, currentCenterCoordsElement, copyCoordsBtn;
 
 // Инициализация карты
-const map = L.map('map').setView([48.257381, 37.134785], 10);
-// L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    // attribution: '© OpenStreetMap'
-// }).addTo(map);
-window.osm.addTo(map);
-
-
-// Добавляем обработчик изменения масштаба
-map.on('zoomend', function() {
-    console.log('Текущий масштаб карты:', map.getZoom());
-});
-
-
-function replaceAttributionFlag() {
-    const newSvgString = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 6" width="12" height="8"><rect fill="#fff" width="9" height="3"/><rect fill="#d52b1e" y="3" width="9" height="3"/><rect fill="#0039a6" y="2" width="9" height="2"/></svg>';
-
-    // Находим контейнер атрибуции
-    const attributionContainer = document.querySelector('.leaflet-control-attribution');
-    if (!attributionContainer) {
-        setTimeout(replaceAttributionFlag, 100);
-        return;
-    }
-
-    // Сохраняем оригинальный текст атрибуции (без флагов)
-    const originalText = attributionContainer.textContent;
+function initMap() {
+    map = L.map('map').setView([55.751244, 37.618423], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
     
-    // Удаляем все существующие флаги
-    const existingFlags = attributionContainer.querySelectorAll('svg, .leaflet-attribution-flag');
-    existingFlags.forEach(flag => flag.remove());
+    // Инициализация переменных
+    citiesDropdown = document.getElementById('cities-dropdown');
+    currentCenterCoordsElement = document.getElementById('current-center-coords');
+    copyCoordsBtn = document.getElementById('copy-coords-btn');
+	
+    // Обработчики
+    document.getElementById('first-btn').addEventListener('click', () => navigateTo(0));
+    document.getElementById('prev-btn').addEventListener('click', () => navigateTo(currentIndex - 1));
+    document.getElementById('next-btn').addEventListener('click', () => navigateTo(currentIndex + 1));
+    document.getElementById('last-btn').addEventListener('click', () => navigateTo(window.kmlFiles.length - 1));
     
-    // Создаем контейнер для российского флага
-    const flagContainer = document.createElement('span');
-    flagContainer.className = 'russian-flag';
-    flagContainer.innerHTML = newSvgString;
+    document.getElementById('coords-input').addEventListener('change', handleCoordsInput);
+    document.getElementById('cities-dropdown').addEventListener('change', handleCitySelect);
+    document.getElementById('copy-coords-btn').addEventListener('click', copyCoords);	
     
-    // Вставляем флаг в начало контейнера
-    attributionContainer.insertBefore(flagContainer, attributionContainer.firstChild);
-    
-    // Восстанавливаем оригинальный текст
-    attributionContainer.textContent = originalText;
-    attributionContainer.prepend(flagContainer);
+    map.on('moveend', updateCurrentCenterDisplay);
 }
 
-// Перехват создания элементов атрибуции
-const originalAddTo = L.Control.Attribution.prototype.addTo;
-L.Control.Attribution.prototype.addTo = function(map) {
-    const result = originalAddTo.call(this, map);
-    replaceAttributionFlag();
-    return result;
-};
+// Остальные функции карты 
 
-// Перехват обновления атрибуции
-const originalSetPrefix = L.Control.Attribution.prototype.setPrefix;
-L.Control.Attribution.prototype.setPrefix = function(prefix) {
-    const result = originalSetPrefix.call(this, prefix);
-    replaceAttributionFlag();
-    return result;
-};
-
-const originalAddAttribution = L.Control.Attribution.prototype.addAttribution;
-L.Control.Attribution.prototype.addAttribution = function(text) {
-    const result = originalAddAttribution.call(this, text);
-    replaceAttributionFlag();
-    return result;
-};
-
-map.whenReady(replaceAttributionFlag);
-map.on('baselayerchange', replaceAttributionFlag);
-
-// map.on('baselayerchange', layer => {
-    // const center = map.getCenter();
-    // if (layer.name.includes('Yandex')) {
-      // map.options.crs = L.CRS.EPSG3395;
-    // } else {
-      // map.options.crs = L.CRS.EPSG3857;
-    // }
-    // map.setView(center);
-  // });
-
-// Управление слоями карты
-const baseLayers = {
-    "OpenStreetMap": osm,
-    // "CyclOSM": cyclosm,
-    "OpenTopoMap": topo,
-    "ESRI World Imagery": esri,
-    // "CartoDB Voyager": carto,
-    // "RU Army": ru,
-    "Google Maps": goo
-    // "Yandex Maps": yandexLayer
-};
-
-// Создаем кастомный контрол слоев
-const customLayerControl = L.control.layers(baseLayers, null, {
-    collapsed: true,
-    position: 'topright'
-}).addTo(map);
-
-// setTimeout(() => {
-    ////////Находим радио-кнопку для активного слоя
-    // const activeLayerName = Object.keys(baseLayers).find(name => 
-        // map.hasLayer(baseLayers[name])
-    // );
-    
-    // if (activeLayerName) {
-        // const inputId = `leaflet-base-layers-${activeLayerName.replace(/\s+/g, '-').toLowerCase()}`;
-        // const radioInput = document.querySelector(`#${inputId}`);
-        // if (radioInput) {
-            // radioInput.checked = true;
-        // }
-    // }
-// }, 100);
-
-
-// Скрываем стандартный контрол
-const layerControlContainer = customLayerControl.getContainer();
-layerControlContainer.style.display = 'none';
-
-// Создаем кнопку-иконку
-const layersToggle = L.control({position: 'topright'});
-layersToggle.onAdd = function(map) {
-    this._div = L.DomUtil.create('div', 'leaflet-control-layers-toggle');
-    const t = translations[currentLang];
-    this._div.innerHTML = `<a href="#" title="${t.layersToggleTitle}"></a>`;
-    return this._div;
-};
-layersToggle.addTo(map);
-
-
-
-
-const layersToggleContainer = layersToggle.getContainer();
-
-// Добавим логирование событий
-console.log("Инициализация панели слоев...");
-
-// Флаг для отслеживания нахождения курсора над панелью
-let isHoveringPanel = false;
-
-// Флаг для отслеживания состояния панели
-let isPanelOpen = false;
-let panelHovered = false;
-// Флаг для отслеживания открытого состояния панели
-let isLayerPanelOpen = false;
-// Предотвращаем закрытие при взаимодействии с панелью
-// Обработчики для отслеживания состояния наведения
-// layerControlContainer.addEventListener('mouseenter', function() {
-    // console.log("Курсор вошел в панель слоев");
-    // isHoveringPanel = true;
-// });
-
-// layerControlContainer.addEventListener('mouseleave', function() {
-    // console.log("Курсор вышел из панели слоев");
-    // isHoveringPanel = false;
-// });
-
-layerControlContainer.addEventListener('mouseenter', () => {
-    console.log("Курсор вошел в панель слоев");
-    // panelHovered = true;
-});
-
-layerControlContainer.addEventListener('mouseleave', () => {
-    console.log("Курсор вышел из панели слоев");
-    // panelHovered = false;
-    
-    // Закрываем панель только если она была открыта и курсор ушел
-    // setTimeout(() => {
-        // if (isPanelOpen && !panelHovered) {
-            // console.log("НЕ Автозакрытие панели после задержки");
-            // closeLayerPanel();
-			openLayerPanel();
-        // }
-    // }, 300); // Задержка перед закрытием
-});
-
-// function toggleLayerPanel() {
-    // const isVisible = layerControlContainer.style.display === 'block';
-    
-    // if (isVisible) {
-        // closeLayerPanel();
-    // } else {
-        // openLayerPanel();
-    // }
-// }
-
-function openLayerPanel() {
-    console.log("Открытие панели слоев");
-    layerControlContainer.style.display = 'block';
-    layerControlContainer.classList.add('leaflet-control-layers-expanded');
-    layersToggleContainer.classList.add('active');
-    isLayerPanelOpen = true;
-}
-
-function closeLayerPanel() {
-    console.log("Закрытие панели слоев");
-    layerControlContainer.style.display = 'none';
-    layerControlContainer.classList.remove('leaflet-control-layers-expanded');
-    layersToggleContainer.classList.remove('active');
-    isLayerPanelOpen = false;
+// Функция для преобразования даты из формата DD.MM.YY в объект Date
+function parseCustomDate(dateStr) {
+    const [day, month, year] = dateStr.split('.').map(Number);
+    return new Date(2000 + year, month - 1, day);
 }
 
 
-// Предотвращаем закрытие при клике внутри панели
-layerControlContainer.addEventListener('click', function(e) {
-    console.log("Клик внутри панели слоев");
-    e.stopPropagation();
-});
+// Инициализация календаря с ограничением доступных дат
+function initDatePicker() {
+    datePicker = flatpickr("#date-picker", {
+		locale: currentLang === 'ru' ? 'ru' : 'default',
+        dateFormat: "d.m.y",
+        allowInput: true,
+        locale: currentLang, // Используем текущий язык
+        defaultDate: kmlFiles[kmlFiles.length - 1].name,
+        enable: [
+            function(date) {
+                const dateStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth()+1).toString().padStart(2, '0')}.${date.getFullYear().toString().slice(-2)}`;
+                return availableDates.includes(dateStr);
+            }
+        ],
+        onChange: function(selectedDates, dateStr) {
+            const index = kmlFiles.findIndex(file => file.name === dateStr);
+            if (index !== -1) {
+                navigateTo(index);
+            }
+        },
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const today = new Date();
+            const isToday = dayElem.dateObj.getDate() === today.getDate() && 
+                           dayElem.dateObj.getMonth() === today.getMonth() && 
+                           dayElem.dateObj.getFullYear() === today.getFullYear();
+            
+            if (isToday) {
+                dayElem.classList.add('today');
+            }
+            
+            const dateStr = `${dayElem.dateObj.getDate().toString().padStart(2, '0')}.${(dayElem.dateObj.getMonth()+1).toString().padStart(2, '0')}.${dayElem.dateObj.getFullYear().toString().slice(-2)}`;
+            
+            if (availableDates.includes(dateStr)) {
+                dayElem.classList.add('available');
+                
+                if (dateStr === kmlFiles[currentIndex].name) {
+                    dayElem.classList.add('selected');
+                }
+            }
+        }
+    });
+}
 
-// Обработчик клика
-// layersToggle.getContainer().addEventListener('click', function(e) {
-    // e.preventDefault();
-    // e.stopPropagation();
-    
-    // const isVisible = layerControlContainer.style.display === 'block';
-    // layerControlContainer.style.display = isVisible ? 'none' : 'block';
-    // layerControlContainer.classList.toggle('leaflet-control-layers-expanded', !isVisible);
-    
-    // /////Добавляем/убираем класс активности
-    // this.classList.toggle('active', !isVisible);
-// });
-// Обработчик клика по кнопке переключения
-layersToggleContainer.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log("Клик по кнопке слоев");
-    
-    if (isLayerPanelOpen) {
-        closeLayerPanel();
-    } else {
-        openLayerPanel();
-    }
-});
+// Функция для проверки валидности координат
+function isValidCoordinate(value, isLatitude) {
+    const num = parseFloat(value);
+    if (isNaN(num)) return false;
+    if (isLatitude) return num >= -90 && num <= 90;
+    return num >= -180 && num <= 180;
+}
 
-// Обработчик закрытия при клике вне панели
-document.addEventListener('click', function(e) {
-    // Пропускаем события, если панель не видима
-    if (layerControlContainer.style.display !== 'block') return;
-    
-    const isClickOnPanel = layerControlContainer.contains(e.target);
-    const isClickOnToggle = layersToggleContainer.contains(e.target);
-    
-    console.log(`Клик вне панели: panel=${isClickOnPanel}, toggle=${isClickOnToggle}, hover=${isHoveringPanel}`);
-    
-    if (!isClickOnPanel && !isClickOnToggle && !isHoveringPanel) {
-        console.log("Закрытие панели слоев");
-        layerControlContainer.style.display = 'none';
-        layersToggleContainer.classList.remove('active');
-    }
-});
-
-// обработчик для закрытия панели при выборе слоя
-// layerControlContainer.addEventListener('click', function(e) {
-    // e.stopPropagation();
-    
-    ///////////Закрываем панель при выборе слоя
-    // if (e.target.tagName === 'INPUT' && e.target.type === 'radio') {
-        // layerControlContainer.style.display = 'none';
-        // layersToggle.getContainer().classList.remove('active');
-    // }
-// });
-
-////// Закрытие при клике вне области
-// map.on('click', function() {
-    // if (layerControlContainer.style.display === 'block') {
-        // layerControlContainer.style.display = 'none';
-    // }
-// });
-// Обработчик клика по документу
-document.addEventListener('click', function(e) {
-    // Если панель не открыта, ничего не делаем
-    if (!isLayerPanelOpen) return;
-    
-    // Проверяем, был ли клик внутри панели или по кнопке переключения
-    const isClickInsidePanel = layerControlContainer.contains(e.target);
-    const isClickOnToggle = layersToggleContainer.contains(e.target);
-    
-    console.log(`Клик вне панели: panel=${isClickInsidePanel}, toggle=${isClickOnToggle}`);
-    
-    // Если клик был вне панели и не по кнопке, закрываем панель
-    if (!isClickInsidePanel && !isClickOnToggle) {
-        closeLayerPanel();
-    }
-});
-// Для RU слоя ограничиваем зум
-map.on('baselayerchange', function(e) {
+// Функция обновления отображения текущего центра
+function updateCurrentCenterDisplay() {
     const center = map.getCenter();
-    const zoom = map.getZoom();
-    
-    // Сохраняем текущий CRS перед проверкой
-    const oldCRS = map.options.crs;
-    
-    // Определяем новый CRS
-    let newCRS;
-    if (e.name.includes("Yandex")) {
-        newCRS = L.CRS.EPSG3395;
-    } else {
-        newCRS = L.CRS.EPSG3857;
+    currentCenterCoordsElement.textContent = `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}`;
+}
+
+
+let highlightMarker = null;
+let highlightTimeout = null;
+let highlightAnimationInterval = null;
+
+function centerMap(lat, lng) {
+    const currentZoom = map.getZoom();
+    map.setView([lat, lng], currentZoom);
+    document.getElementById('coords-input').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+    // Очищаем предыдущие элементы анимации
+    if (highlightMarker) {
+        map.removeLayer(highlightMarker);
+        highlightMarker = null;
     }
-    
-    // Сравниваем CRS и меняем только при необходимости
-    if (oldCRS !== newCRS) {
-        map.options.crs = newCRS;
-        // Перезагружаем KML только если CRS изменился
-        reloadKmlForCRS(center, zoom);
+    if (highlightAnimationInterval) {
+        clearInterval(highlightAnimationInterval);
     }
-    map.invalidateSize();
+    if (highlightTimeout) {
+        clearTimeout(highlightTimeout);
+    }
+
+    // Параметры анимации
+    const startRadius = 10000; // Начальный радиус 2 км
+    const endRadius = 200;    // Конечный радиус 200 м
+    const duration = 2500;    // Длительность анимации 2 секунды
+    const steps = 100;         // Количество шагов анимации
+
+    // Создаем временный маркер
+    highlightMarker = L.circle([lat, lng], {
+        color: '#ff4444',
+        fillColor: '#ff7777',
+        fillOpacity: 0.3,
+        radius: startRadius
+    }).addTo(map);
+
+    // Анимация уменьшения
+    let currentStep = 0;
+    highlightAnimationInterval = setInterval(() => {
+        currentStep++;
+        const progress = currentStep / steps;
+        const currentRadius = startRadius - (startRadius - endRadius) * progress;
+        
+        highlightMarker.setRadius(currentRadius);
+        
+        if (currentStep >= steps) {
+            clearInterval(highlightAnimationInterval);
+        }
+    }, duration / steps);
+
+    // Удаление через 5 секунд
+    highlightTimeout = setTimeout(() => {
+        map.removeLayer(highlightMarker);
+        highlightMarker = null;
+    }, 5000);
+}
+
+
+// Загрузка постоянного KML-слоя
+async function loadPermanentKml() {
+    try {
+        const layer = await omnivore.kml(permanentLayerData.path);
+        layer.eachLayer(function(featureLayer) {
+            if (featureLayer.setStyle) {
+                featureLayer.setStyle(window.permanentLayerStyle);
+            }
+        });
+        
+        permanentLayer = layer;
+        permanentLayer.addTo(map);
+    } catch (error) {
+        console.error("Ошибка загрузки постоянного KML:", error);
+    }
+}
+
+// Функция загрузки основного KML (с сохранением оригинальных стилей)
+async function loadKmlFile(file) {
+    if (currentLayer) {
+        map.removeLayer(currentLayer);
+    }
+
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+
+    try {
+        const response = await fetch(file.path);
+        const kmlText = await response.text();
+        const parser = new DOMParser();
+        const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+
+        const layerGroup = L.layerGroup().addTo(map);
+        currentLayer = layerGroup;
+
+        // Парсим все стили (включая StyleMap)
+        const styles = {};
+        const styleMaps = {};
+
+        // Обрабатываем обычные стили
+        kmlDoc.querySelectorAll('Style').forEach(style => {
+            const id = style.getAttribute('id');
+            styles[id] = {
+                line: parseLineStyle(style),
+                poly: parsePolyStyle(style)
+            };
+        });
+
+        // Обрабатываем StyleMap
+        kmlDoc.querySelectorAll('StyleMap').forEach(styleMap => {
+            const id = styleMap.getAttribute('id');
+            const pairs = {};
+            styleMap.querySelectorAll('Pair').forEach(pair => {
+                const key = pair.querySelector('key').textContent;
+                const styleUrl = pair.querySelector('styleUrl').textContent.replace('#', '');
+                pairs[key] = styleUrl;
+            });
+            styleMaps[id] = pairs;
+        });
+
+        let bounds = L.latLngBounds(); // Инициализация пустыми границами
+		// let bounds = null;
+
+		kmlDoc.querySelectorAll('Placemark').forEach(placemark => {
+			// Получаем стиль для Placemark
+			const styleUrl = placemark.querySelector('styleUrl')?.textContent.replace('#', '');
+			let style = { line: {}, poly: {} };
+			
+			if (styleUrl) {
+				// Проверяем StyleMap
+				if (styleMaps[styleUrl]) {
+					const normalStyleId = styleMaps[styleUrl].normal;
+					style = Object.assign(
+						{}, 
+						styles[normalStyleId]?.line || {},
+						styles[normalStyleId]?.poly || {}
+					);
+				} 
+				// Проверяем обычный стиль
+				else if (styles[styleUrl]) {
+					style = Object.assign(
+						{}, 
+						styles[styleUrl].line || {},
+						styles[styleUrl].poly || {}
+					);
+				}
+			}
+
+			// Обработка LineString
+			const lineString = placemark.querySelector('LineString');
+			if (lineString) {
+				const coords = parseCoordinates(lineString);
+				if (coords.length < 2) return;
+
+				const polyline = L.polyline(coords, {
+					color: style.color || '#3388ff',
+					weight: style.weight || 3,
+					opacity: style.opacity || 1
+				}).addTo(layerGroup);
+
+				if (polyline.getBounds().isValid()) {
+					bounds.extend(polyline.getBounds());
+				}
+			}
+
+			// Обработка Polygon
+			const polygon = placemark.querySelector('Polygon');
+			if (polygon) {
+				const coords = parseCoordinates(polygon.querySelector('LinearRing'));
+				if (coords.length < 3) return;
+
+				const poly = L.polygon(coords, {
+					color: style.color || '#3388ff',
+					weight: style.weight || 3,
+					fillColor: style.fillColor || '#3388ff',
+					fillOpacity: style.fillOpacity || 0.5
+				}).addTo(layerGroup);
+
+				if (poly.getBounds().isValid()) {
+					bounds.extend(poly.getBounds());
+				}
+			}
+		});
+
+		if (bounds.isValid()) {
+			const sw = bounds.getSouthWest();
+			const ne = bounds.getNorthEast();
+			const isNotPoint = sw.lat !== ne.lat || sw.lng !== ne.lng;
+			
+			if (!preserveZoom && isNotPoint) {
+				map.fitBounds(bounds);
+			} else {
+				map.setView(currentCenter, currentZoom);
+			}
+		} else {
+			map.setView(currentCenter, currentZoom);
+		}
+		preserveZoom = true;
+    } catch (error) {
+        console.error("Ошибка загрузки KML:", error);
+    }
+
+    // Вспомогательные функции
+    function parseLineStyle(style) {
+        const lineStyle = style.querySelector('LineStyle');
+        if (!lineStyle) return null;
+        
+        return {
+            color: parseColor(lineStyle.querySelector('color')?.textContent || '#3388ff'),
+            weight: parseFloat(lineStyle.querySelector('width')?.textContent || '3'),
+            opacity: parseOpacity(lineStyle.querySelector('color')?.textContent)
+        };
+    }
+
+    function parsePolyStyle(style) {
+        const polyStyle = style.querySelector('PolyStyle');
+        if (!polyStyle) return null;
+
+        return {
+            fillColor: parseColor(polyStyle.querySelector('color')?.textContent || '#3388ff'),
+            fillOpacity: parseOpacity(polyStyle.querySelector('color')?.textContent)
+        };
+    }
+
+    function parseCoordinates(element) {
+        const coordinates = element?.querySelector('coordinates')?.textContent;
+        if (!coordinates) return [];
+        
+        return coordinates
+            .trim()
+            .split(/\s+/)
+            .map(coord => {
+                const [lng, lat] = coord.split(',').map(Number);
+                return [lat, lng];
+            });
+    }
+
+    function parseColor(kmlColor) {
+        if (!kmlColor) return '#3388ff';
+        // Конвертация ABGR в RGBA (пример: ff0000ff -> #ff0000)
+        const a = kmlColor.substr(0, 2);
+        const b = kmlColor.substr(2, 2);
+        const g = kmlColor.substr(4, 2);
+        const r = kmlColor.substr(6, 2);
+        return `#${r}${g}${b}`;
+    }
+
+    function parseOpacity(kmlColor) {
+        if (!kmlColor) return 1;
+        const alpha = parseInt(kmlColor.substr(0, 2), 16) / 255;
+        return alpha.toFixed(2);
+    }
+
+    function updateBounds(layer) {
+        if (layer.getBounds) {
+            bounds = bounds ? bounds.extend(layer.getBounds()) : layer.getBounds();
+        }
+    }
+}
+
+// Навигация к определенному индексу
+async function navigateTo(index) {
+    if (index < 0 || index >= kmlFiles.length) return;
+    
+    currentIndex = index;
+    const file = kmlFiles[currentIndex];
+    
+    // Обновляем календарь
+    datePicker.setDate(file.name, false);
+    
+    // Загружаем файл
+    await loadKmlFile(file);
+    
+    // Обновляем состояние кнопок
+    updateButtons();
+}
+
+// Обновление состояния кнопок
+function updateButtons() {
+    document.getElementById('first-btn').disabled = currentIndex === 0;
+    document.getElementById('prev-btn').disabled = currentIndex === 0;
+    document.getElementById('next-btn').disabled = currentIndex === kmlFiles.length - 1;
+    document.getElementById('last-btn').disabled = currentIndex === kmlFiles.length - 1;
+}
+
+// Обработчики кнопок навигации
+document.getElementById('first-btn').addEventListener('click', async () => {
+    await navigateTo(0).catch(console.error);
 });
 
-// Обработчик для выбора слоя (радио-кнопки)
-layerControlContainer.addEventListener('click', function(e) {
-    if (e.target.tagName === 'INPUT' && e.target.type === 'radio') {
-        console.log("Выбран слой, закрываем панель через 500 мс");
-        setTimeout(closeLayerPanel, 500);
-    }
-});
-// customLayerControl.addTo(map);
-
-//////Явно выбрать активный слой
-// map.on('baselayerchange', function(e) {
-//////Убедитесь, что при инициализации выбран правильный слой
-// if (!window.initialLayerSet) {
-	// window.osm.addTo(map); // Выберите OSM по умолчанию
-	// window.initialLayerSet = true;
-// }
-// });
-
-
-
-
-
-
-
-
-//////////////////////////////////////////////////////
-// Линейка
-let rulerToggle;
-function initRulerControl() {
-  // Создаем кнопку переключения как стандартный контрол Leaflet
-  rulerToggle = L.control({ position: 'topleft' });
-  
-  rulerToggle.onAdd = function(map) {
-    this._div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-ruler-toggle');
-    const link = L.DomUtil.create('a', 'leaflet-control-ruler-toggle-btn', this._div);
-    link.href = '#';
-    link.title = translations[currentLang].rulerToggleTitle;
-    link.innerHTML = '📏'; // Или использовать SVG
-    return this._div;
-  };
-  
-  rulerToggle.addTo(map);
-
-  // Обработчик клика по кнопке
-  rulerToggle.getContainer().querySelector('a').addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleRulerPanel();
-  });
-}
-
-function toggleRulerPanel() {
-  const isActive = rulerToggle.getContainer().classList.contains('active');
-  
-  if (isActive) {
-    hideRulerPanel();
-  } else {
-    showRulerPanel();
-  }
-}
-
-function showRulerPanel() {
-    if (rulerToggle && rulerToggle.getContainer) {
-        rulerToggle.getContainer().classList.add('active');
-    }
-    
-    const measureContainer = window.measureControl && window.measureControl.getContainer();
-    if (measureContainer) {
-        measureContainer.style.display = 'block';
-    }
-}
-
-function hideRulerPanel() {
-    if (rulerToggle && rulerToggle.getContainer) {
-        rulerToggle.getContainer().classList.remove('active');
-    }
-    
-    const measureContainer = window.measureControl && window.measureControl.getContainer();
-    if (measureContainer) {
-        measureContainer.style.display = 'none';
-    }
-}
-
-
-
-// функция для инициализации контрола измерения
-function initMeasureControl() {
-    const currentLang = localStorage.getItem('preferredLang') || 'ru';
-    const t = translations[currentLang];
-    
-    const options = {
-        position: 'topleft',
-        unit: 'kilometres',
-        clearMeasurementsOnStop: false,
-        showUnitControl: true,
-        backgroundColor: '#f8f8f8',
-        cursor: 'crosshair',
-        showClearControl: true,
-        clearControlLabel: '&times;',
-        popupFormat: { number: 2 },
-        measureControlTitleOn: t.measureControlTitleOn,
-        measureControlTitleOff: t.measureControlTitleOff,
-        clearControlTitle: t.clearControlTitle,
-        unitControlTitle: t.unitControlTitle,
-        bearingText: currentLang === 'ru' ? 'Азимут' : 'Bearing',
-        units: t.units
-    };
-
-
-    // Удаляем старый контрол если существует
-    //if (window.measureControl) {
-        //window.measureControl.remove();
-        //window.measureControl = null;
-    //}
-
-    // Создаем контрол только если его еще нет
-    if (!window.measureControl) {
-        window.measureControl = L.control.polylineMeasure(options);
-        window.measureControl.addTo(map);
-    }
-}
-
-// Инициализация после создания карты
-document.addEventListener('DOMContentLoaded', function() {
-    initRulerControl();
-    initMeasureControl(); // Инициализация линейки
-    hideRulerPanel();
+document.getElementById('prev-btn').addEventListener('click', async () => {
+    await navigateTo(currentIndex - 1).catch(console.error);
 });
 
+document.getElementById('next-btn').addEventListener('click', async () => {
+    await navigateTo(currentIndex + 1).catch(console.error);
+});
+
+document.getElementById('last-btn').addEventListener('click', async () => {
+    await navigateTo(kmlFiles.length - 1).catch(console.error);
+});
+
+// функция заполнения списка городов
+function populateCitiesDropdown() {
+    // Очищаем список, кроме первого элемента
+    while (citiesDropdown.options.length > 1) {
+        citiesDropdown.remove(1);
+    }
+    
+    // Добавляем города на текущем языке
+    cities.forEach(city => {
+        const option = document.createElement('option');
+        option.value = city.name.ru; // Сохраняем русское название как значение
+        option.textContent = city.name[currentLang];
+        citiesDropdown.appendChild(option);
+    });
+}
 
 
+function handleCoordsInput() {
+    const coords = this.value.split(',').map(coord => coord.trim());
+    
+    if (coords.length === 2) {
+        const lat = parseFloat(coords[0]);
+        const lng = parseFloat(coords[1]);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+            centerMap(lat, lng);
+        }
+    }
+}
+
+function handleCitySelect() {
+    const selectedCityName = this.value;
+    if (!selectedCityName) return;
+    
+    const city = cities.find(c => c.name.ru === selectedCityName);
+    if (city) {
+        document.getElementById('coords-input').value = `${city.lat}, ${city.lng}`;
+        centerMap(city.lat, city.lng);
+        this.value = "";
+    }
+}
+
+function copyCoords() {
+    const coords = currentCenterCoordsElement.textContent;
+    if (coords && coords !== translations[currentLang].undefinedCoords) {
+        navigator.clipboard.writeText(coords)
+            .then(() => {
+                const originalText = this.textContent;
+                this.textContent = translations[currentLang].copySuccess || 'Скопировано!';
+                setTimeout(() => {
+                    this.textContent = originalText;
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('Ошибка копирования: ', err);
+            });
+    }
+}
