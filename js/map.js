@@ -74,6 +74,18 @@ window.goo = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
     // p: Террейн (Terrain)
     // r: Некоторый тип схемы (Altered roadmap)
 
+// Яндекс Карты (схема)
+const yandexUrl = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU';
+const yandexAttrib = '<a http="https://yandex.ru" target="_blank">Yandex</a>';
+window.yandex = L.tileLayer(yandexUrl, {
+    attribution: yandexAttrib,
+    subdomains: ['01','02','03','04'],
+    noWrap: true,
+    name: 'yandex',
+    minZoom: 12
+	// crs: L.CRS.EPSG3395,
+    //zoomOffset: 0
+});
 
 
 
@@ -82,11 +94,17 @@ window.goo = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
 
 
 // Инициализация карты
-const map = L.map('map').setView([55.751244, 37.618423], 5);
+const map = L.map('map').setView([48.257381, 37.134785], 11);
 // L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     // attribution: '© OpenStreetMap'
 // }).addTo(map);
 window.osm.addTo(map);
+
+
+// Добавляем обработчик изменения масштаба
+map.on('zoomend', function() {
+    console.log('Текущий масштаб карты:', map.getZoom());
+});
 
 
 function replaceAttributionFlag() {
@@ -145,6 +163,16 @@ L.Control.Attribution.prototype.addAttribution = function(text) {
 map.whenReady(replaceAttributionFlag);
 map.on('baselayerchange', replaceAttributionFlag);
 
+// map.on('baselayerchange', layer => {
+    // const center = map.getCenter();
+    // if (layer.name.includes('Yandex')) {
+      // map.options.crs = L.CRS.EPSG3395;
+    // } else {
+      // map.options.crs = L.CRS.EPSG3857;
+    // }
+    // map.setView(center);
+  // });
+
 // Управление слоями карты
 const baseLayers = {
     "OpenStreetMap": osm,
@@ -153,7 +181,8 @@ const baseLayers = {
     "ESRI World Imagery": esri,
     // "CartoDB Voyager": carto,
     // "RU Army": ru,
-    "Google Maps": goo
+    "Google Maps": goo,
+    "Yandex Maps": yandex
 };
 
 // Создаем кастомный контрол слоев
@@ -349,10 +378,24 @@ document.addEventListener('click', function(e) {
 });
 // Для RU слоя ограничиваем зум
 map.on('baselayerchange', function(e) {
-    if (e.name === "RU Army") {
-        if (map.getZoom() < 10) map.setZoom(10);
-        if (map.getZoom() > 13) map.setZoom(13);
+        map.invalidateSize();
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    
+    // Устанавливаем CRS перед перезагрузкой KML
+    if (e.name.includes("Yandex")) {
+        map.options.crs = L.CRS.EPSG3395;
+    } else {
+        map.options.crs = L.CRS.EPSG3857;
     }
+    
+    // Перезагружаем KML без дополнительного setView
+    reloadKmlForCRS(center, zoom);
+        
+    // Добавляем принудительное обновление размера карты
+    // setTimeout(() => {
+        map.invalidateSize();
+    // }, 500);
 });
 
 // Обработчик для выбора слоя (радио-кнопки)
@@ -440,23 +483,14 @@ function hideRulerPanel() {
 
 
 
-// Функция для обновления текстов линейки при смене языка
-function updateMeasureControlLanguage(lang) {
-    if (typeof L.control.polylineMeasure !== 'function') {
-        console.error('PolylineMeasure plugin not loaded!');
-        return;
-    }
+// функция для инициализации контрола измерения
+function initMeasureControl() {
+    const currentLang = localStorage.getItem('preferredLang') || 'ru';
+    const t = translations[currentLang];
     
-    // Удаляем старый контрол если существует    
-    if (window.measureControl) {
-        map.removeControl(window.measureControl);
-        window.measureControl = null;
-    }
-
-    const t = translations[lang];
     const options = {
         position: 'topleft',
-        unit: 'kilometers',
+        unit: 'kilometres',
         clearMeasurementsOnStop: false,
         showUnitControl: true,
         backgroundColor: '#f8f8f8',
@@ -468,55 +502,28 @@ function updateMeasureControlLanguage(lang) {
         measureControlTitleOff: t.measureControlTitleOff,
         clearControlTitle: t.clearControlTitle,
         unitControlTitle: t.unitControlTitle,
-        bearingText: lang === 'ru' ? 'Азимут' : 'Bearing'
+        bearingText: currentLang === 'ru' ? 'Азимут' : 'Bearing',
+        units: t.units
     };
 
-    // Добавляем переводы единиц измерения
-    if (t.units) {
-        options.units = t.units;
-    }
 
-    window.measureControl = L.control.polylineMeasure(options);
-    window.measureControl.addTo(map);
-    
-    //////////////// После создания контрола линейки
-    // const measureContainer = window.measureControl.getContainer();
-   /////////////// Проверяем существование контейнера
-    // if (measureContainer) {
-        // measureContainer.classList.add('leaflet-control-ruler-panel');
-        
-        /////////////// Переносим в нужное место в DOM
-        // const rulerToggleContainer = rulerToggle.getContainer();
-        // if (rulerToggleContainer && rulerToggleContainer.parentNode) {
-            // rulerToggleContainer.parentNode.insertBefore(
-                // measureContainer,
-                // rulerToggleContainer.nextSibling
-            // );
-        // }
-    // } else {
-        // console.error('Failed to get measure control container');
-    // }
-    
-    // Скрываем панель при инициализации
-    hideRulerPanel();
-    
+    // Удаляем старый контрол если существует
+    //if (window.measureControl) {
+        //window.measureControl.remove();
+        //window.measureControl = null;
+    //}
+
+    // Создаем контрол только если его еще нет
+    if (!window.measureControl) {
+        window.measureControl = L.control.polylineMeasure(options);
+        window.measureControl.addTo(map);
+    }
 }
 
 // Инициализация после создания карты
 document.addEventListener('DOMContentLoaded', function() {
     initRulerControl();
-    const currentLang = localStorage.getItem('preferredLang') || 'ru';
-    
-    setTimeout(() => {
-        const currentLang = localStorage.getItem('preferredLang') || 'ru';
-        updateMeasureControlLanguage(currentLang);
-    }, 500);
-    
-    // Скрываем панель при старте
+    initMeasureControl(); // Инициализация линейки
     hideRulerPanel();
 });
 
-// Обновление при смене языка
-document.addEventListener('languageChanged', function(e) {
-    updateMeasureControlLanguage(e.detail);
-});

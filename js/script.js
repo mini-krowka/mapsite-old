@@ -234,7 +234,7 @@ function parsePolyStyle(style) {
     };
 }
 
-function parseCoordinates(element) {
+function parseCoordinates(element, crs) {
     const coordinates = element?.querySelector('coordinates')?.textContent;
     if (!coordinates) return [];
     
@@ -366,12 +366,13 @@ async function loadPermanentKmlLayers() {
                     // Обработка LineString
                     const lineString = placemark.querySelector('LineString');
                     if (lineString) {
-                        const coords = parseCoordinates(lineString);
+                        const coords = parseCoordinates(lineString, map.options.crs);
                         if (coords.length >= 2) {
                             const polyline = L.polyline(coords, {
                                 color: style.line.color || '#3388ff',
                                 weight: style.line.weight || 3,
-                                opacity: style.line.opacity || 1
+                                opacity: style.line.opacity || 1,
+								interactive: false
                             }).addTo(layerGroup);
                             
                             // Обновляем границы СРАЗУ ПОСЛЕ СОЗДАНИЯ
@@ -391,13 +392,14 @@ async function loadPermanentKmlLayers() {
                     // Обработка Polygon
                     const polygon = placemark.querySelector('Polygon');
                     if (polygon) {
-                        const coords = parseCoordinates(polygon.querySelector('LinearRing'));
+                        const coords = parseCoordinates(polygon.querySelector('LinearRing'), map.options.crs);
                         if (coords.length >= 3) {
                             const poly = L.polygon(coords, {
                                 color: style.line.color || '#3388ff',
                                 weight: style.line.weight || 0,
                                 fillColor: style.poly.fillColor || '#3388ff',
-                                fillOpacity: style.poly.fillOpacity || 0.5
+                                fillOpacity: style.poly.fillOpacity || 0.5,
+								interactive: false // Отключаем интерактивность полигонов
                             }).addTo(layerGroup);
                             
                             // Обновляем границы СРАЗУ ПОСЛЕ СОЗДАНИЯ
@@ -429,9 +431,9 @@ async function loadPermanentKmlLayers() {
                 window.permanentLayerGroups.push(layerGroup);
                 
                 // Применяем границы только если они валидны
-                if (bounds.isValid()) {
-                    map.fitBounds(bounds);
-                }
+//                if (bounds.isValid()) {
+//                    map.fitBounds(bounds);
+//                }
             } catch (error) {
                 console.error(`Ошибка обработки слоя ${layerData.path}:`, error);
             }
@@ -442,7 +444,7 @@ async function loadPermanentKmlLayers() {
 }
 
 // Функция загрузки основного KML (с сохранением оригинальных стилей)
-async function loadKmlFile(file) {
+async function loadKmlFile(file, targetCRS) {
     if (currentLayer) {
         map.removeLayer(currentLayer);
     }
@@ -540,7 +542,7 @@ async function loadKmlFile(file) {
             // Обработка LineString
             const lineString = placemark.querySelector('LineString');
             if (lineString) {
-                const coords = parseCoordinates(lineString);
+                const coords = parseCoordinates(lineString, map.options.crs);
                 if (coords.length < 2) {
                     if (LOG_TEMPORARY_STYLES) console.groupEnd(); // Закрываем группу Placemark
                     return;
@@ -549,7 +551,8 @@ async function loadKmlFile(file) {
                 const polyline = L.polyline(coords, {
                     color: style.color || '#3388ff',
                     weight: style.weight || 3,
-                    opacity: style.opacity || 1
+                    opacity: style.opacity || 1,
+                    interactive: false
                 }).addTo(layerGroup);
 
                 // Логирование информации о линии
@@ -569,7 +572,7 @@ async function loadKmlFile(file) {
             // Обработка Polygon
             const polygon = placemark.querySelector('Polygon');
             if (polygon) {
-                const coords = parseCoordinates(polygon.querySelector('LinearRing'));
+                const coords = parseCoordinates(polygon.querySelector('LinearRing'), map.options.crs);
                 if (coords.length < 3) {
                     if (LOG_TEMPORARY_STYLES) console.groupEnd(); // Закрываем группу Placemark
                     return;
@@ -579,7 +582,8 @@ async function loadKmlFile(file) {
                     color: style.color || '#3388ff',
                     weight: style.weight || 3,
                     fillColor: style.fillColor || '#3388ff',
-                    fillOpacity: style.fillOpacity || 0.5
+                    fillOpacity: style.fillOpacity || 0.5,
+					interactive: false // Отключаем интерактивность полигонов
                 }).addTo(layerGroup);
 
                 // Логирование информации о полигоне
@@ -612,11 +616,11 @@ async function loadKmlFile(file) {
             const ne = bounds.getNorthEast();
             const isNotPoint = sw.lat !== ne.lat || sw.lng !== ne.lng;
             
-            if (!preserveZoom && isNotPoint) {
-                map.fitBounds(bounds);
-            } else {
+//            if (!preserveZoom && isNotPoint) {
+//                map.fitBounds(bounds);
+//            } else {
                 map.setView(currentCenter, currentZoom);
-            }
+//            }
         } else {
             map.setView(currentCenter, currentZoom);
         }
@@ -633,11 +637,34 @@ async function loadKmlFile(file) {
     }
 }
 
+async function reloadKmlForCRS(center, zoom) {
+    await loadPermanentKmlLayers();
+    if (currentLayer){        
+        const file = kmlFiles[currentIndex];
+        try {
+            map.removeLayer(currentLayer);
+            await loadKmlFile(file);
+        } catch (error) {
+            console.error("Ошибка перезагрузки KML:", error);
+        }
+    }
+        
+    // Восстанавливаем позицию с проверкой валидности
+    if (center && zoom && center.lat !== 0 && center.lng !== 0) {
+        map.setView(center, zoom);
+    } else {
+        // Используем центр по умолчанию, если текущий невалиден
+        map.setView([48.257381, 37.134785], 11);
+    }
+    
+    map.invalidateSize();
+}
+
 // Навигация к определенному индексу
 async function navigateTo(index) {
     if (index < 0 || index >= kmlFiles.length) return;
     
-    try {
+    try {        
         currentIndex = index;
         const file = kmlFiles[currentIndex];
         selectedDate = file.name; // Сохраняем выбранную дату
@@ -647,7 +674,10 @@ async function navigateTo(index) {
             datePicker.setDate(selectedDate, false);
         }
         
+		// Определяем текущую CRS
+		const currentCRS = map.options.crs;
         await loadKmlFile(file);
+        
     } catch (error) {
         console.error("Ошибка навигации:", error);
     } finally {
@@ -852,6 +882,8 @@ async function init() {
       updateCurrentCenterDisplay();
       // replaceAttributionFlag();
     }, 50);
+	
+	map.options.crs = L.CRS.EPSG3857;
     
     const flagInterval = setInterval(() => {
     if (document.querySelector('.leaflet-control-attribution')) {
@@ -894,16 +926,7 @@ async function init() {
 		window.osm.addTo(map); // Активируйте OSM слой
 		window.initialLayerSet = true;
 	});
-    
-    // setTimeout(() => {
-    // if (typeof L.control.polylineMeasure === 'function') {
-        // const currentLang = localStorage.getItem('preferredLang') || 'ru';
-        // updateMeasureControlLanguage(currentLang);
-    // }
-  // }, 1000);
-  
-  // initRulerControl();
-    
+        
   } catch (error) {
     console.error('Ошибка инициализации:', error);
   }
