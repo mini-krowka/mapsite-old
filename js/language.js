@@ -1,11 +1,12 @@
 const translations = {
     ru: {
-        title: "  dataviewer",
+        title: "Сливочный каприз dataviewer",
         //logoAlt: "dataviewer - просмотр данных",
         centerLabel: "Центрировать на:",
         coordsPlaceholder: "Координаты",
         selectCity: "Выберите город",
         currentCenter: "Текущий центр: ",
+		invalidCoords: "Неверный формат координат",
         undefinedCoords: "не определен",
         copyTooltip: "Копировать координаты",
         copiedText: "✓",
@@ -41,20 +42,21 @@ const translations = {
         },
         
         viewSwitchMap: "Карта",
-        viewSwitchSt1: "Статистика1",
-        viewSwitchSt2: "Статистика2",
+        viewSwitchSt1: "Статистика",
+        viewSwitchSt2: "Потери ВСУ",
         
-        viewSwitchTlg:  "Ссылка",
-        viewSwitchDon:  "Поддержать",
+        viewSwitchTlg:  "Гугл-карта",
+        viewSwitchDon:  "Сбор на СВО",
         viewSwitchInfo: "Инфо"
     },
     en: {
-        title: "  dataviewer",
+        title: "Creamy caprice dataviewer",
         //logoAlt: "dataviewer - data visualization",
         centerLabel: "Center on:",
         coordsPlaceholder: "Coordinates",
         selectCity: "Select city",
         currentCenter: "Current center: ",
+		invalidCoords: "Invalid coordinate format",
         undefinedCoords: "undefined",
         copyTooltip: "Copy coordinates",
         copiedText: "✓",
@@ -90,10 +92,10 @@ const translations = {
         },
         
         viewSwitchMap: "Map",
-        viewSwitchSt1: "Statistics1",
-        viewSwitchSt2: "Statistics2",
+        viewSwitchSt1: "Statistics",
+        viewSwitchSt2: "UA Losses",
         
-        viewSwitchTlg:  "Link",
+        viewSwitchTlg:  "Google-map",
         viewSwitchDon:  "Donate",
         viewSwitchInfo: "Info"
     }
